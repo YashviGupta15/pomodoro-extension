@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link rel="stylesheet" href="popup.css" />
+  <title>Cozy Pomodoro</title>
+</head>
+
+<body>
+  <div class="app" data-mode="focus">
+    <header class="tabs">
+      <button class="tab" data-mode="focus">🍅 Focus</button>
+      <button class="tab" data-mode="short">☕ Short</button>
+      <button class="tab" data-mode="long">🌿 Long</button>
+    </header>
+
+    <main class="timer-wrap">
+      <svg class="ring" viewBox="0 0 200 200" aria-hidden="true">
+        <circle class="ring-track" cx="100" cy="100" r="90" />
+        <circle class="ring-progress" cx="100" cy="100" r="90" />
+      </svg>
+      <div class="time" id="time">25:00</div>
+      <div class="mode-label" id="modeLabel">Focus</div>
+    </main>
+
+    <div class="controls">
+      <button class="btn ghost" id="resetBtn" title="Reset">↺</button>
+      <button class="btn primary" id="startBtn">Start</button>
+      <button class="btn ghost" id="settingsBtn" title="Settings">⚙</button>
+    </div>
+
+    <footer class="stats">
+      <span id="pomoDots" class="dots"></span>
+      <span id="todayCount">0 today</span>
+    </footer>
+
+    <section class="settings" id="settingsPanel" hidden>
+      <h2>Settings</h2>
+      <label>Focus (min) <input type="number" id="focusMin" min="1" max="120" /></label>
+      <label>Short break (min) <input type="number" id="shortMin" min="1" max="60" /></label>
+      <label>Long break (min) <input type="number" id="longMin" min="1" max="60" /></label>
+      <label>Long break every <input type="number" id="longEvery" min="1" max="12" /> focus</label>
+      <label class="toggle">
+        <span>Auto-start next session</span>
+        <input type="checkbox" id="autoStart" />
+        <span class="switch"></span>
+      </label>
+      <label class="toggle">
+        <span>Play sound on finish</span>
+        <input type="checkbox" id="sound" />
+        <span class="switch"></span>
+      </label>
+      <div class="settings-actions">
+        <button class="btn ghost" id="closeSettings">Close</button>
+        <button class="btn primary" id="saveSettings">Save</button>
+      </div>
+    </section>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+
+</html>

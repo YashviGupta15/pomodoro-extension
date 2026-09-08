@@ -1,0 +1,320 @@
+:root {
+  --focus: #ff6b6b;
+  --focus-soft: #ffe3e3;
+  --short: #4ecdc4;
+  --short-soft: #d8f5f2;
+  --long: #5c7cfa;
+  --long-soft: #dfe4ff;
+  --ink: #4a4453;
+  --muted: #9b95a3;
+  --card: #fffdfb;
+  --accent: var(--focus);
+  --accent-soft: var(--focus-soft);
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  width: 300px;
+  font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+  color: var(--ink);
+  background: var(--card);
+}
+
+.app {
+  padding: 16px 18px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  transition: background 0.4s ease;
+}
+
+.app[data-mode="focus"] {
+  --accent: var(--focus);
+  --accent-soft: var(--focus-soft);
+}
+
+.app[data-mode="short"] {
+  --accent: var(--short);
+  --accent-soft: var(--short-soft);
+}
+
+.app[data-mode="long"] {
+  --accent: var(--long);
+  --accent-soft: var(--long-soft);
+}
+
+/* Tabs */
+.tabs {
+  display: flex;
+  gap: 6px;
+  background: #f4f1f6;
+  padding: 4px;
+  border-radius: 14px;
+}
+
+.tab {
+  flex: 1;
+  border: none;
+  background: transparent;
+  padding: 7px 4px;
+  border-radius: 10px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.tab.active {
+  background: var(--card);
+  color: var(--ink);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.06);
+}
+
+/* Timer ring */
+.timer-wrap {
+  position: relative;
+  width: 200px;
+  height: 200px;
+  margin: 4px auto 0;
+  display: grid;
+  place-items: center;
+}
+
+.ring {
+  position: absolute;
+  inset: 0;
+  transform: rotate(-90deg);
+}
+
+.ring-track {
+  fill: none;
+  stroke: var(--accent-soft);
+  stroke-width: 12;
+}
+
+.ring-progress {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 12;
+  stroke-linecap: round;
+  stroke-dasharray: 565.48;
+  /* 2 * PI * 90 */
+  stroke-dashoffset: 0;
+  transition: stroke-dashoffset 0.5s linear, stroke 0.4s ease;
+}
+
+.time {
+  font-size: 46px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 1px;
+}
+
+.mode-label {
+  position: absolute;
+  bottom: 44px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+}
+
+/* Controls */
+.controls {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+}
+
+.btn {
+  border: none;
+  cursor: pointer;
+  font-family: inherit;
+  border-radius: 14px;
+  transition: transform 0.1s ease, filter 0.2s ease, background 0.2s ease;
+}
+
+.btn:active {
+  transform: scale(0.95);
+}
+
+.btn.primary {
+  background: var(--accent);
+  color: #fff;
+  font-size: 15px;
+  font-weight: 700;
+  padding: 12px 34px;
+  box-shadow: 0 6px 14px var(--accent-soft);
+}
+
+.btn.primary:hover {
+  filter: brightness(1.05);
+}
+
+.btn.ghost {
+  background: #f4f1f6;
+  color: var(--ink);
+  width: 42px;
+  height: 42px;
+  font-size: 18px;
+  display: grid;
+  place-items: center;
+}
+
+.btn.ghost:hover {
+  background: #ebe7ee;
+}
+
+/* Stats */
+.stats {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.dots {
+  display: inline-flex;
+  gap: 5px;
+}
+
+.dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--accent-soft);
+}
+
+.dot.filled {
+  background: var(--accent);
+}
+
+/* Settings */
+.btn.ghost.active-cog {
+  background: var(--accent);
+  color: #fff;
+}
+
+.settings {
+  border-top: 1px solid #f0edf2;
+  padding-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  animation: settings-in 0.22s ease;
+}
+
+.settings[hidden] {
+  display: none;
+}
+
+@keyframes settings-in {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.settings h2 {
+  font-size: 13px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.settings label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 13px;
+  gap: 8px;
+}
+
+.settings input[type="number"] {
+  width: 58px;
+  padding: 6px 8px;
+  border: 1px solid #e6e2ea;
+  border-radius: 8px;
+  font-family: inherit;
+  text-align: center;
+}
+
+/* Cute toggle switch (replaces native checkbox) */
+.settings label.toggle {
+  cursor: pointer;
+  user-select: none;
+}
+
+.settings label.toggle input {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.switch {
+  position: relative;
+  width: 40px;
+  height: 22px;
+  border-radius: 999px;
+  background: #e2dde7;
+  flex: 0 0 auto;
+  transition: background 0.25s ease;
+}
+
+.switch::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+  transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.toggle input:checked+.switch {
+  background: var(--accent);
+}
+
+.toggle input:checked+.switch::after {
+  transform: translateX(18px);
+}
+
+.toggle input:focus-visible+.switch {
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.settings-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.settings-actions .btn {
+  flex: 1;
+  padding: 9px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.settings-actions .ghost {
+  width: auto;
+  height: auto;
+}
