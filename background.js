@@ -235,9 +235,27 @@ async function ensureOffscreen() {
   }
 }
 
+// Wait until the offscreen document's message listener is actually ready.
+// Freshly created documents need a moment to load offscreen.js, and a message
+// sent before then is silently dropped (this is why the first chime was lost).
+async function waitForOffscreenReady(timeoutMs = 1500) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    try {
+      const res = await chrome.runtime.sendMessage({ type: "ping", target: "offscreen" });
+      if (res?.ready) return true;
+    } catch (_) {
+      /* not ready yet */
+    }
+    await new Promise((r) => setTimeout(r, 60));
+  }
+  return false;
+}
+
 async function playChime() {
   try {
     await ensureOffscreen();
+    await waitForOffscreenReady();
     await chrome.runtime.sendMessage({ type: "playChime", target: "offscreen" });
   } catch (_) {
     /* offscreen unavailable; the notification still fires */
@@ -289,6 +307,10 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
       case "switchMode":
         await switchMode(msg.mode);
         sendResponse(await snapshot());
+        break;
+      case "testSound":
+        await playChime();
+        sendResponse({ ok: true });
         break;
       case "saveSettings":
         await chrome.storage.local.set({ settings: { ...(await getSettings()), ...msg.settings } });

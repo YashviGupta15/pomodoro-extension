@@ -14,6 +14,7 @@ const el = {
   settingsPanel: document.getElementById("settingsPanel"),
   closeSettings: document.getElementById("closeSettings"),
   saveSettings: document.getElementById("saveSettings"),
+  testSound: document.getElementById("testSound"),
   pomoDots: document.getElementById("pomoDots"),
   todayCount: document.getElementById("todayCount"),
   fields: {
@@ -175,6 +176,57 @@ el.closeSettings.addEventListener("click", () => {
   el.settingsBtn.classList.remove("active-cog");
 });
 
+el.testSound.addEventListener("click", async () => {
+  // Play locally from the popup (guaranteed user gesture) AND via the background
+  // offscreen path, so this both previews the sound and verifies the pipeline.
+  playPopupChime();
+  await safeSend("testSound");
+});
+
+// A local chime used only for the Test button, where a user gesture is present.
+// We keep ONE reused, pre-warmed AudioContext so the first click sounds just as
+// strong as later ones (a fresh context starts cold/suspended, which clipped the
+// attack of the very first chime).
+let popupAudioCtx = null;
+
+function getPopupContext() {
+  if (!popupAudioCtx) {
+    popupAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  }
+  return popupAudioCtx;
+}
+
+async function playPopupChime() {
+  try {
+    const ctx = getPopupContext();
+    if (ctx.state === "suspended") await ctx.resume();
+
+    const master = ctx.createGain();
+    master.gain.value = 0.9;
+    master.connect(ctx.destination);
+
+    const notes = [523.25, 659.25, 783.99];
+    // Small lead-in so the attack lands after any hardware warm-up, never inside it.
+    const now = ctx.currentTime + 0.06;
+    notes.forEach((freq, i) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = "triangle";
+      osc.frequency.value = freq;
+      const start = now + i * 0.16;
+      gain.gain.setValueAtTime(0.0001, start);
+      gain.gain.exponentialRampToValueAtTime(0.6, start + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.0001, start + 0.55);
+      osc.connect(gain).connect(master);
+      osc.start(start);
+      osc.stop(start + 0.6);
+    });
+    // Note: we intentionally do NOT close the context, so it stays warm for reuse.
+  } catch (_) {
+    /* ignore */
+  }
+}
+
 el.saveSettings.addEventListener("click", async () => {
   const settings = {
     focusMin: clampNum(el.fields.focusMin.value, 1, 120, 25),
@@ -196,5 +248,14 @@ function clampNum(value, min, max, fallback) {
   if (!Number.isFinite(n)) return fallback;
   return Math.min(max, Math.max(min, n));
 }
+
+// Prime the audio context on the first user interaction anywhere in the popup,
+// so by the time the Test button is clicked the context is already running.
+function primeAudioOnce() {
+  const ctx = getPopupContext();
+  if (ctx.state === "suspended") ctx.resume().catch(() => { });
+  document.removeEventListener("pointerdown", primeAudioOnce);
+}
+document.addEventListener("pointerdown", primeAudioOnce);
 
 refresh();
