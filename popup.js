@@ -24,13 +24,28 @@ const el = {
     longEvery: document.getElementById("longEvery"),
     autoStart: document.getElementById("autoStart"),
     sound: document.getElementById("sound"),
+    completionSound: document.getElementById("completionSound"),
+    pinOverlay: document.getElementById("pinOverlay"),
   },
 };
+
+// Populate the completion-sound dropdown from the shared engine.
+(function populateSoundOptions() {
+  const sel = el.fields.completionSound;
+  if (!sel || !self.PomodoroSounds) return;
+  self.PomodoroSounds.SOUND_IDS.forEach((id) => {
+    const opt = document.createElement("option");
+    opt.value = id;
+    opt.textContent = self.PomodoroSounds.LABELS[id];
+    sel.appendChild(opt);
+  });
+})();
 
 const MODE_LABELS = { focus: "Focus", short: "Short Break", long: "Long Break" };
 
 let current = { settings: null, state: null };
 let localTimer = null;
+let overlayActive = false;
 
 function send(type, payload = {}) {
   return chrome.runtime.sendMessage({ type, ...payload });
@@ -115,6 +130,8 @@ async function refresh() {
   let res = await safeSend("getStatus");
   if (!res || !res.state) res = await safeSend("getStatus");
   if (res && res.state) current = res;
+  const pinRes = await safeSend("getPinState");
+  overlayActive = !!(pinRes && pinRes.pinned);
   syncSettingsFields();
   render();
   if (current.state?.running) startLocalTick();
@@ -138,6 +155,8 @@ function syncSettingsFields() {
   el.fields.longEvery.value = s.longEvery;
   el.fields.autoStart.checked = s.autoStart;
   el.fields.sound.checked = s.sound;
+  el.fields.completionSound.value = s.completionSound || "chime";
+  el.fields.pinOverlay.checked = !!overlayActive;
 }
 
 // Events
@@ -176,17 +195,57 @@ el.closeSettings.addEventListener("click", () => {
   el.settingsBtn.classList.remove("active-cog");
 });
 
-el.testSound.addEventListener("click", async () => {
-  // Play locally from the popup (guaranteed user gesture) AND via the background
-  // offscreen path, so this both previews the sound and verifies the pipeline.
-  playPopupChime();
-  await safeSend("testSound");
+el.testSound.addEventListener("click", () => {
+  // Preview the currently-selected sound locally (guaranteed user gesture).
+  playPopupChime(el.fields.completionSound.value);
 });
 
-// A local chime used only for the Test button, where a user gesture is present.
-// We keep ONE reused, pre-warmed AudioContext so the first click sounds just as
-// strong as later ones (a fresh context starts cold/suspended, which clipped the
-// attack of the very first chime).
+// Preview immediately when a different sound is chosen.
+el.fields.completionSound.addEventListener("change", () => {
+  playPopupChime(el.fields.completionSound.value);
+});
+
+// Pin toggle: explicitly pin/unpin the overlay on the active tab based on the
+// checkbox's new value (no blind toggling).
+el.fields.pinOverlay.addEventListener("change", async () => {
+  const desired = el.fields.pinOverlay.checked;
+  const res = await safeSend("setPin", { pinned: desired });
+  if (res && typeof res.pinned === "boolean") {
+    overlayActive = res.pinned;
+    el.fields.pinOverlay.checked = res.pinned;
+    if (res.error === "restricted-page") {
+      showPinHint("Can't pin on this page. Try a normal website tab.");
+    } else if (res.error) {
+      showPinHint("Couldn't pin here." + (res.detail ? " (" + res.detail + ")" : ""));
+    } else {
+      clearPinHint();
+    }
+  } else {
+    // Revert the toggle if the call failed.
+    el.fields.pinOverlay.checked = overlayActive;
+    showPinHint("Couldn't pin here.");
+  }
+});
+
+function showPinHint(text) {
+  let hint = document.getElementById("pinHint");
+  if (!hint) {
+    hint = document.createElement("div");
+    hint.id = "pinHint";
+    hint.className = "pin-hint";
+    el.fields.pinOverlay.closest("label").insertAdjacentElement("afterend", hint);
+  }
+  hint.textContent = text;
+}
+
+function clearPinHint() {
+  const hint = document.getElementById("pinHint");
+  if (hint) hint.remove();
+}
+
+// A local preview player used only for the Test button. We keep ONE reused,
+// pre-warmed AudioContext so the first click sounds just as strong as later ones
+// (a fresh context starts cold/suspended, which clipped the first chime's attack).
 let popupAudioCtx = null;
 
 function getPopupContext() {
@@ -196,32 +255,12 @@ function getPopupContext() {
   return popupAudioCtx;
 }
 
-async function playPopupChime() {
+async function playPopupChime(soundId) {
   try {
     const ctx = getPopupContext();
     if (ctx.state === "suspended") await ctx.resume();
-
-    const master = ctx.createGain();
-    master.gain.value = 0.9;
-    master.connect(ctx.destination);
-
-    const notes = [523.25, 659.25, 783.99];
-    // Small lead-in so the attack lands after any hardware warm-up, never inside it.
-    const now = ctx.currentTime + 0.06;
-    notes.forEach((freq, i) => {
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-      osc.type = "triangle";
-      osc.frequency.value = freq;
-      const start = now + i * 0.16;
-      gain.gain.setValueAtTime(0.0001, start);
-      gain.gain.exponentialRampToValueAtTime(0.6, start + 0.02);
-      gain.gain.exponentialRampToValueAtTime(0.0001, start + 0.55);
-      osc.connect(gain).connect(master);
-      osc.start(start);
-      osc.stop(start + 0.6);
-    });
-    // Note: we intentionally do NOT close the context, so it stays warm for reuse.
+    self.PomodoroSounds.play(ctx, soundId);
+    // Intentionally do NOT close the context, so it stays warm for reuse.
   } catch (_) {
     /* ignore */
   }
@@ -235,6 +274,7 @@ el.saveSettings.addEventListener("click", async () => {
     longEvery: clampNum(el.fields.longEvery.value, 1, 12, 4),
     autoStart: el.fields.autoStart.checked,
     sound: el.fields.sound.checked,
+    completionSound: el.fields.completionSound.value,
   };
   const res = await safeSend("saveSettings", { settings });
   if (res && res.state) current = res;

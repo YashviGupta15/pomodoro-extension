@@ -48,9 +48,17 @@
         <span class="switch"></span>
       </label>
       <label class="toggle">
+        <span>Pin timer on page</span>
+        <input type="checkbox" id="pinOverlay" />
+        <span class="switch"></span>
+      </label>
+      <label class="toggle">
         <span>Play sound on finish</span>
         <input type="checkbox" id="sound" />
         <span class="switch"></span>
+      </label>
+      <label>Completion sound
+        <select id="completionSound" class="select"></select>
       </label>
       <button class="btn ghost test-sound" id="testSound">🔊 Test sound</button>
       <div class="settings-actions">
@@ -60,6 +68,7 @@
     </section>
   </div>
 
+  <script src="sounds.js"></script>
   <script src="popup.js"></script>
 </body>
 

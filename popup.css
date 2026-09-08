@@ -310,6 +310,25 @@ body {
   border-radius: 12px;
 }
 
+.select {
+  padding: 6px 8px;
+  border: 1px solid #e6e2ea;
+  border-radius: 8px;
+  font-family: inherit;
+  font-size: 13px;
+  background: #fff;
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.pin-hint {
+  font-size: 11px;
+  color: var(--focus);
+  background: var(--focus-soft);
+  padding: 6px 8px;
+  border-radius: 8px;
+}
+
 .settings-actions {
   display: flex;
   gap: 8px;

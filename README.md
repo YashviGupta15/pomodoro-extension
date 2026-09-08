@@ -10,7 +10,9 @@ few sessions. The timer keeps running in the background even when the popup is c
 - **Focus / Short Break / Long Break** modes with one-tap switching
 - Timer runs in a **background service worker**, so it keeps counting when the popup closes
 - **Toolbar badge** shows minutes remaining at a glance
-- **Desktop notification** + gentle chime when a session ends
+- **Desktop notification** + a completion sound when a session ends
+- **Multiple completion sounds** to choose from: Chime, Bell, Digital, Marimba, Gong (with a Test button and instant preview)
+- **Pin timer on page**: a small draggable floating widget you can drop anywhere on the current tab
 - **Auto-cycle**: a long break is suggested after every N focus sessions (configurable)
 - **Customizable durations** and options, saved with `chrome.storage`
 - **Daily counter** and per-cycle progress dots
@@ -39,17 +41,24 @@ Both browsers use the same Chromium extension system, so the steps are nearly id
 - Click the toolbar icon to open the timer.
 - Pick a mode (**Focus**, **Short**, **Long**), then hit **Start**.
 - **Pause/Resume** with the same button; **↺** resets the current mode.
-- Open **⚙ Settings** to change durations, long-break frequency, auto-start, and sound.
+- Open **⚙ Settings** to change durations, long-break frequency, auto-start, completion sound, and pinning.
+- **Completion sound**: pick one from the dropdown; it previews instantly, or use **🔊 Test sound**.
+- **Pin timer on page**: toggle **Pin timer on page** to drop a small floating timer onto the
+  current tab. Drag it anywhere; click ✕ on it (or toggle off) to unpin.
 
 ## Project Structure
 
 ```
 pomodoro-extension/
 ├── manifest.json      # MV3 configuration
-├── background.js      # Service worker: timer state, badge, notifications
+├── background.js      # Service worker: timer state, badge, notifications, overlay injection
 ├── popup.html         # Popup markup
 ├── popup.css          # Cute minimal styling
 ├── popup.js           # Popup UI logic
+├── sounds.js          # Shared completion-sound synth engine (chime/bell/digital/marimba/gong)
+├── offscreen.html     # Offscreen document host for background audio
+├── offscreen.js       # Plays the completion sound from the service worker
+├── overlay.js         # Draggable floating timer injected into the active tab
 └── icons/
     ├── icon16.png / icon48.png / icon128.png
     └── make_icons.py  # Regenerates the tomato icons (optional)
@@ -70,6 +79,14 @@ same file names, or update the paths in `manifest.json`.
 ## Notes
 
 - No build step and no dependencies — plain HTML/CSS/JS.
-- The finish chime is generated with the Web Audio API (no bundled audio file), so it
-  only plays while the popup is open at the moment a session ends. The desktop
-  notification always fires regardless.
+- Completion sounds are synthesized with the Web Audio API (no bundled audio files) and
+  played from a background **offscreen document**, so they fire whether or not the popup
+  is open. The desktop notification always fires regardless.
+- **Pin behavior**: the pin is tracked per tab. The overlay's presence in the page is the
+  source of truth, and a pinned tab automatically re-shows the overlay after a reload or
+  navigation (to a supported page). Closing a tab clears its pin.
+- **Pin limitation**: the floating timer is injected into the current web page, so it
+  can't appear on browser-internal pages (`chrome://`, `edge://`, the new-tab page, or the
+  extension stores). It floats within the page, not above the browser window or other
+  apps — that's the boundary of what an extension can do without a separate native app.
+  If you pin on an unsupported page, the popup shows a short hint.

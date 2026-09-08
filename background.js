@@ -14,6 +14,7 @@ const DEFAULT_SETTINGS = {
   longEvery: 4, // long break after this many focus sessions
   autoStart: false,
   sound: true,
+  completionSound: "chime", // chime | bell | digital | marimba | gong
 };
 
 const DEFAULT_STATE = {
@@ -164,7 +165,7 @@ async function completeSession() {
   }
 
   notify(finishedMode, nextMode);
-  if (settings.sound) await playChime();
+  if (settings.sound) await playChime(settings.completionSound);
 
   state = await setState({
     mode: nextMode,
@@ -252,11 +253,11 @@ async function waitForOffscreenReady(timeoutMs = 1500) {
   return false;
 }
 
-async function playChime() {
+async function playChime(soundId = "chime") {
   try {
     await ensureOffscreen();
     await waitForOffscreenReady();
-    await chrome.runtime.sendMessage({ type: "playChime", target: "offscreen" });
+    await chrome.runtime.sendMessage({ type: "playChime", target: "offscreen", sound: soundId });
   } catch (_) {
     /* offscreen unavailable; the notification still fires */
   }
@@ -309,7 +310,24 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
         sendResponse(await snapshot());
         break;
       case "testSound":
-        await playChime();
+        await playChime(msg.sound || (await getSettings()).completionSound);
+        sendResponse({ ok: true });
+        break;
+      case "getPinState": {
+        const tab = await getActiveTab();
+        sendResponse({ pinned: tab ? await isTabPinned(tab.id) : false });
+        break;
+      }
+      case "setPin":
+        try {
+          sendResponse(await setPin(!!msg.pinned));
+        } catch (e) {
+          sendResponse({ pinned: false, error: "handler-threw", detail: String((e && e.message) || e) });
+        }
+        break;
+      case "unpinSelf":
+        // Sent from the overlay's close button; _sender.tab tells us which tab.
+        if (_sender?.tab?.id != null) await removeTabFromPinned(_sender.tab.id);
         sendResponse({ ok: true });
         break;
       case "saveSettings":
@@ -332,3 +350,119 @@ async function snapshot() {
   const [settings, state] = await Promise.all([getSettings(), getState()]);
   return { settings, state };
 }
+
+// --- Pin overlay ----------------------------------------------------------
+// Presence of the overlay in a tab is the source of truth. We remember which
+// tab IDs the user pinned (persisted) so we can re-inject after a reload.
+
+async function getPinnedTabs() {
+  const { pinnedTabs } = await chrome.storage.local.get("pinnedTabs");
+  return Array.isArray(pinnedTabs) ? pinnedTabs : [];
+}
+
+async function setPinnedTabs(ids) {
+  await chrome.storage.local.set({ pinnedTabs: [...new Set(ids)] });
+}
+
+async function addTabToPinned(tabId) {
+  const ids = await getPinnedTabs();
+  if (!ids.includes(tabId)) await setPinnedTabs([...ids, tabId]);
+}
+
+async function removeTabFromPinned(tabId) {
+  const ids = await getPinnedTabs();
+  await setPinnedTabs(ids.filter((id) => id !== tabId));
+}
+
+async function isTabPinned(tabId) {
+  const ids = await getPinnedTabs();
+  return ids.includes(tabId);
+}
+
+async function getActiveTab() {
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  return tab && tab.id != null ? tab : null;
+}
+
+function isRestrictedUrl(url) {
+  if (!url) return false; // empty means we couldn't read it; let injection decide
+  return (
+    /^(chrome|edge|about|chrome-extension|edge-extension|view-source|devtools):/i.test(url) ||
+    /^https:\/\/(chrome\.google\.com\/webstore|microsoftedge\.microsoft\.com)/i.test(url)
+  );
+}
+
+// Ask the tab whether the overlay is currently present.
+async function overlayPresent(tabId) {
+  try {
+    const [res] = await chrome.scripting.executeScript({
+      target: { tabId },
+      func: () => !!document.getElementById("cozy-pomodoro-overlay"),
+    });
+    return !!res?.result;
+  } catch (_) {
+    return false;
+  }
+}
+
+async function injectOverlay(tabId) {
+  // overlay.js is idempotent: it only adds the overlay if missing.
+  await chrome.scripting.executeScript({ target: { tabId }, files: ["overlay.js"] });
+}
+
+async function removeOverlay(tabId) {
+  try {
+    await chrome.scripting.executeScript({
+      target: { tabId },
+      func: () => {
+        const host = document.getElementById("cozy-pomodoro-overlay");
+        if (host) host.remove();
+      },
+    });
+  } catch (_) {
+    /* tab may be gone; ignore */
+  }
+}
+
+// Explicitly pin or unpin the active tab based on the desired state.
+async function setPin(desiredPinned) {
+  const tab = await getActiveTab();
+  if (!tab) return { pinned: false, error: "no-active-tab" };
+  if (isRestrictedUrl(tab.url)) return { pinned: false, error: "restricted-page" };
+
+  try {
+    if (desiredPinned) {
+      await injectOverlay(tab.id);
+      // Confirm it actually landed (catches restricted pages with empty URL).
+      const present = await overlayPresent(tab.id);
+      if (!present) return { pinned: false, error: "restricted-page" };
+      await addTabToPinned(tab.id);
+      return { pinned: true };
+    } else {
+      await removeOverlay(tab.id);
+      await removeTabFromPinned(tab.id);
+      return { pinned: false };
+    }
+  } catch (e) {
+    return { pinned: false, error: "inject-failed", detail: String(e && e.message || e) };
+  }
+}
+
+// Re-inject the overlay when a pinned tab finishes (re)loading.
+chrome.tabs.onUpdated.addListener(async (tabId, changeInfo) => {
+  if (changeInfo.status !== "complete") return;
+  if (await isTabPinned(tabId)) {
+    try {
+      await injectOverlay(tabId);
+    } catch (_) {
+      // If we can no longer inject (e.g. navigated to a restricted page),
+      // drop it from the pinned set so the state stays honest.
+      await removeTabFromPinned(tabId);
+    }
+  }
+});
+
+// Clean up the pinned set when a tab is closed.
+chrome.tabs.onRemoved.addListener((tabId) => {
+  removeTabFromPinned(tabId);
+});
